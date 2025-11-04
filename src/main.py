@@ -50,6 +50,7 @@ with app.app_context():
     from src.models.user import User
     from src.models.ride import Ride
     from src.models.strava_token import StravaToken
+    from src.models.chat_message import ChatMessage
     
     db.create_all()
     

@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from src.models.user import User, db
 from src.models.ride import Ride
+from src.models.chat_message import ChatMessage
 from src.utils.ai_analysis import chat_with_ai_coach, generate_training_plan
 from datetime import datetime, timedelta
 import json
@@ -25,32 +26,85 @@ def chat_with_coach():
     if not message:
         return jsonify({'error': 'Message is required'}), 400
     
+    # Save user message to history
+    user_msg = ChatMessage(
+        user_id=user.id,
+        role='user',
+        content=message
+    )
+    db.session.add(user_msg)
+    
+    # Get conversation history (last 20 messages for context)
+    chat_history = ChatMessage.query.filter_by(
+        user_id=user.id
+    ).order_by(ChatMessage.created_at.desc()).limit(20).all()
+    chat_history.reverse()  # Chronological order
+    
     # Get recent rides for context
     recent_rides = Ride.query.filter(
         Ride.user_id == user.id,
         Ride.date >= datetime.utcnow() - timedelta(days=7)
     ).order_by(Ride.date.desc()).limit(3).all()
     
-    # Build context with user goals
-    context = f"Athlete: {user.username}\n"
+    # Build context with user profile and history
+    context = f"You are Coach Manee, a personalized AI cycling coach.\n"
+    context += f"Athlete: {user.username}\n"
     context += f"FTP: {user.current_ftp}W\n"
     if user.training_goals:
         context += f"Training Goals: {user.training_goals}\n"
     context += "\n"
     
     if recent_rides:
-        context += "Recent rides:\n"
+        context += "Recent rides (last 7 days):\n"
         for ride in recent_rides:
             context += f"- {ride.name}: {ride.avg_power}W avg, {ride.training_stress_score:.1f} TSS\n"
+        context += "\n"
+    
+    # Add conversation history for continuity
+    if chat_history:
+        context += "Previous conversation context:\n"
+        for msg in chat_history[-10:]:  # Last 10 messages for context
+            context += f"{msg.role}: {msg.content[:100]}...\n"
+        context += "\n"
+    
+    context += "Remember past conversations and provide personalized, contextual coaching advice.\n"
     
     try:
         response = chat_with_ai_coach(user, message, context)
+        
+        # Save assistant response to history
+        assistant_msg = ChatMessage(
+            user_id=user.id,
+            role='assistant',
+            content=response
+        )
+        db.session.add(assistant_msg)
+        db.session.commit()
+        
         return jsonify({
             'response': response,
             'timestamp': datetime.utcnow().isoformat()
         }), 200
     except Exception as e:
+        db.session.rollback()
         return jsonify({'error': f'Chat failed: {str(e)}'}), 500
+
+@coaching_bp.route('/coaching/chat/history', methods=['GET'])
+def get_chat_history():
+    """Retrieve chat history for the current user"""
+    user = require_auth()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get all chat messages for this user
+    messages = ChatMessage.query.filter_by(
+        user_id=user.id
+    ).order_by(ChatMessage.created_at.asc()).all()
+    
+    return jsonify({
+        'messages': [msg.to_dict() for msg in messages],
+        'total_messages': len(messages)
+    }), 200
 
 @coaching_bp.route('/coaching/training-plan', methods=['POST'])
 def create_training_plan():
@@ -185,4 +239,5 @@ def get_training_goals():
         'suggested_goals': suggested_goals,
         'custom_goal_option': True
     }), 200
+
 
