@@ -15,7 +15,7 @@ from src.routes.dashboard import dashboard_bp
 from src.routes.coaching import coaching_bp
 from src.routes.upload import upload_bp
 from src.routes.analytics import analytics_bp
-# from src.routes.strava import strava_bp  # Temporarily disabled for debugging
+from src.routes.strava import strava_bp
 # from src.routes.training_plans import training_plans_bp  # Disabled due to SQLAlchemy registry conflict
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
@@ -37,7 +37,7 @@ app.register_blueprint(dashboard_bp, url_prefix='/api')
 app.register_blueprint(coaching_bp, url_prefix='/api')
 app.register_blueprint(upload_bp, url_prefix='/api')
 app.register_blueprint(analytics_bp, url_prefix='/api')
-# app.register_blueprint(strava_bp, url_prefix='/api/strava')  # Temporarily disabled
+app.register_blueprint(strava_bp, url_prefix='/api/strava')
 # app.register_blueprint(training_plans_bp, url_prefix='/api/training-plans')  # Disabled due to SQLAlchemy registry conflict
 
 # Database configuration
@@ -49,7 +49,7 @@ with app.app_context():
     # Import base models only - training_plan models will be imported through routes
     from src.models.user import User
     from src.models.ride import Ride
-    # from src.models.strava_token import StravaToken  # Temporarily disabled
+    from src.models.strava_token import StravaToken
     
     db.create_all()
     
