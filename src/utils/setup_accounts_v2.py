@@ -43,10 +43,52 @@ def create_demo_account():
     db.session.add(demo_user)
     db.session.commit()
     
-    # Load converted ride data
+    # Create sample ride data programmatically
     try:
-        with open('/home/ubuntu/user01_rides.json', 'r') as f:
-            rides_data = json.load(f)
+        # Generate 3 sample rides with realistic data
+        from datetime import datetime, timedelta
+        
+        recent_dates = [
+            datetime.now() - timedelta(days=2),
+            datetime.now() - timedelta(days=5),
+            datetime.now() - timedelta(days=8)
+        ]
+        
+        rides_data = [
+            {
+                "name": "Morning Ride",
+                "date": recent_dates[0].isoformat(),
+                "distance": 66.1,
+                "duration": 13140,
+                "elevation_gain": 81,
+                "average_power": 155,
+                "average_heart_rate": 142,
+                "average_cadence": 88,
+                "training_stress_score": 119
+            },
+            {
+                "name": "Recovery Ride",
+                "date": recent_dates[1].isoformat(),
+                "distance": 42.3,
+                "duration": 7200,
+                "elevation_gain": 43,
+                "average_power": 120,
+                "average_heart_rate": 128,
+                "average_cadence": 85,
+                "training_stress_score": 45
+            },
+            {
+                "name": "Interval Training",
+                "date": recent_dates[2].isoformat(),
+                "distance": 13.9,
+                "duration": 1860,
+                "elevation_gain": 16,
+                "average_power": 186,
+                "average_heart_rate": 165,
+                "average_cadence": 92,
+                "training_stress_score": 25
+            }
+        ]
         
         # Insert demo rides with recent dates
         # Spread rides across the last 2 weeks
