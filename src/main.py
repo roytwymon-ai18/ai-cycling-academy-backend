@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from flask import Flask, send_from_directory
 from flask_cors import CORS
+import re
 from src.models.user import db
 # Training plan models will be imported by the routes that use them
 from src.routes.user import user_bp
@@ -20,7 +21,15 @@ app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'sta
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
 
 # Enable CORS for all routes with credentials support
-CORS(app, supports_credentials=True, origins=['http://localhost:5174', 'http://localhost:5173', 'https://ai-cycling-dashboard-83na2zfi8-roy-twymons-projects.vercel.app', 'https://ai-cycling-dashboard-pdv92m8ww-roy-twymons-projects.vercel.app', 'https://ai-cycling-dashboard.vercel.app'], allow_headers=['Content-Type'], expose_headers=['*'])
+# Allow localhost and all Vercel deployments
+def check_origin(origin):
+    if origin in ['http://localhost:5174', 'http://localhost:5173']:
+        return True
+    if origin and re.match(r'https://ai-cycling-dashboard.*\.vercel\.app$', origin):
+        return True
+    return False
+
+CORS(app, supports_credentials=True, origins=check_origin, allow_headers=['Content-Type'], expose_headers=['*'])
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
