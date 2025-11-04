@@ -15,6 +15,7 @@ from src.routes.dashboard import dashboard_bp
 from src.routes.coaching import coaching_bp
 from src.routes.upload import upload_bp
 from src.routes.analytics import analytics_bp
+from src.routes.admin import admin_bp
 # from src.routes.strava import strava_bp
 # from src.routes.training_plans import training_plans_bp  # Disabled due to SQLAlchemy registry conflict
 
@@ -37,6 +38,7 @@ app.register_blueprint(dashboard_bp, url_prefix='/api')
 app.register_blueprint(coaching_bp, url_prefix='/api')
 app.register_blueprint(upload_bp, url_prefix='/api')
 app.register_blueprint(analytics_bp, url_prefix='/api')
+app.register_blueprint(admin_bp, url_prefix='/api/admin')
 # app.register_blueprint(strava_bp, url_prefix='/api/strava')
 # app.register_blueprint(training_plans_bp, url_prefix='/api/training-plans')  # Disabled due to SQLAlchemy registry conflict
 
