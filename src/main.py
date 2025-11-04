@@ -20,7 +20,7 @@ app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'sta
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
 
 # Enable CORS for all routes with credentials support
-CORS(app, supports_credentials=True, origins=['http://localhost:5174', 'http://localhost:5173', 'https://ai-cycling-dashboard-83na2zfi8-roy-twymons-projects.vercel.app', 'https://ai-cycling-dashboard.vercel.app'])
+CORS(app, supports_credentials=True, origins=['http://localhost:5174', 'http://localhost:5173', 'https://ai-cycling-dashboard-83na2zfi8-roy-twymons-projects.vercel.app', 'https://ai-cycling-dashboard-pdv92m8ww-roy-twymons-projects.vercel.app', 'https://ai-cycling-dashboard.vercel.app'], allow_headers=['Content-Type'], expose_headers=['*'])
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
