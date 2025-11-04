@@ -43,8 +43,16 @@ with app.app_context():
     from src.models.ride import Ride
     
     db.create_all()
-    # Database is initialized via setup_accounts.py script
-    # Don't auto-create users here
+    
+    # Auto-initialize demo accounts if database is empty
+    if User.query.count() == 0:
+        print("Database is empty. Initializing demo accounts...")
+        try:
+            from src.utils.setup_accounts_v2 import main as setup_main
+            setup_main()
+            print("Demo accounts created successfully!")
+        except Exception as e:
+            print(f"Warning: Could not create demo accounts: {e}")
 
 @app.route('/api/health')
 def health():
