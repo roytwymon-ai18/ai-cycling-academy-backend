@@ -21,15 +21,12 @@ app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'sta
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
 
 # Enable CORS for all routes with credentials support
-# Allow localhost and all Vercel deployments
-def check_origin(origin):
-    if origin in ['http://localhost:5174', 'http://localhost:5173']:
-        return True
-    if origin and re.match(r'https://ai-cycling-dashboard.*\.vercel\.app$', origin):
-        return True
-    return False
-
-CORS(app, supports_credentials=True, origins=check_origin, allow_headers=['Content-Type'], expose_headers=['*'])
+# Allow localhost and all Vercel deployments using regex pattern
+CORS(app, 
+     supports_credentials=True, 
+     origins=r'https://ai-cycling-dashboard.*\.vercel\.app|http://localhost:517[34]',
+     allow_headers=['Content-Type'],
+     expose_headers=['*'])
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
