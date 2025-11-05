@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt
 
+# Force rebuild for training plan fix
 COPY . .
 
 # Create directory for database (database file is already included in COPY)
