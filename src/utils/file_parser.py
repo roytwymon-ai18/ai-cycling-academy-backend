@@ -52,8 +52,10 @@ class RideFileParser:
             'duration': 0,
             'elevation_gain': 0,
             'avg_power': 0,
+            'max_power': 0,
             'avg_heart_rate': 0,
             'avg_cadence': 0,
+            'avg_speed': 0,
             'max_speed': 0,
             'calories': 0,
             'tss': 0,
@@ -112,14 +114,16 @@ class RideFileParser:
                 elif session_data.name == 'total_ascent':
                     ride_data['elevation_gain'] = session_data.value
         
-        # Calculate averages
+        # Calculate averages and maximums
         if power_values:
             ride_data['avg_power'] = int(sum(power_values) / len(power_values))
+            ride_data['max_power'] = max(power_values)
         if hr_values:
             ride_data['avg_heart_rate'] = int(sum(hr_values) / len(hr_values))
         if cadence_values:
             ride_data['avg_cadence'] = int(sum(cadence_values) / len(cadence_values))
         if speed_values:
+            ride_data['avg_speed'] = sum(speed_values) / len(speed_values)
             ride_data['max_speed'] = max(speed_values)
         
         # Calculate elevation gain if not in session
@@ -143,8 +147,10 @@ class RideFileParser:
             'duration': 0,
             'elevation_gain': 0,
             'avg_power': 0,
+            'max_power': 0,
             'avg_heart_rate': 0,
             'avg_cadence': 0,
+            'avg_speed': 0,
             'max_speed': 0,
             'calories': 0,
             'tss': 0,
@@ -213,6 +219,9 @@ class RideFileParser:
         if moving_data:
             ride_data['duration'] = int(moving_data.moving_time / 60)  # minutes
             ride_data['max_speed'] = moving_data.max_speed * 3.6 if moving_data.max_speed else 0
+            # Calculate avg_speed from moving data
+            if moving_data.moving_time > 0:
+                ride_data['avg_speed'] = (ride_data['distance'] / (moving_data.moving_time / 3600))  # km/h
         
         if hr_values:
             ride_data['avg_heart_rate'] = int(sum(hr_values) / len(hr_values))
@@ -220,6 +229,7 @@ class RideFileParser:
             ride_data['avg_cadence'] = int(sum(cadence_values) / len(cadence_values))
         if power_values:
             ride_data['avg_power'] = int(sum(power_values) / len(power_values))
+            ride_data['max_power'] = max(power_values)
         
         return ride_data
     
@@ -238,8 +248,10 @@ class RideFileParser:
             'duration': 0,
             'elevation_gain': 0,
             'avg_power': 0,
+            'max_power': 0,
             'avg_heart_rate': 0,
             'avg_cadence': 0,
+            'avg_speed': 0,
             'max_speed': 0,
             'calories': 0,
             'tss': 0,
@@ -249,6 +261,7 @@ class RideFileParser:
         hr_values = []
         cadence_values = []
         power_values = []
+        speed_values = []
         elevation_points = []
         
         # Find all activities
@@ -298,19 +311,30 @@ class RideFileParser:
                         point['elevation'] = float(altitude.text)
                         elevation_points.append(float(altitude.text))
                     
+                    # Speed in extensions
+                    speed = trackpoint.find('.//ns:Speed', ns)
+                    if speed is not None:
+                        speed_kmh = float(speed.text) * 3.6  # m/s to km/h
+                        point['speed'] = speed_kmh
+                        speed_values.append(speed_kmh)
+                    
                     dist = trackpoint.find('ns:DistanceMeters', ns)
                     if dist is not None:
                         point['distance'] = float(dist.text) / 1000
                     
                     ride_data['data_points'].append(point)
         
-        # Calculate averages
+        # Calculate averages and maximums
         if hr_values:
             ride_data['avg_heart_rate'] = int(sum(hr_values) / len(hr_values))
         if cadence_values:
             ride_data['avg_cadence'] = int(sum(cadence_values) / len(cadence_values))
         if power_values:
             ride_data['avg_power'] = int(sum(power_values) / len(power_values))
+            ride_data['max_power'] = max(power_values)
+        if speed_values:
+            ride_data['avg_speed'] = sum(speed_values) / len(speed_values)
+            ride_data['max_speed'] = max(speed_values)
         
         # Calculate elevation gain
         if elevation_points:

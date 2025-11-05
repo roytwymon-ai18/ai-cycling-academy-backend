@@ -132,8 +132,9 @@ Recent Activity (Last 14 days):
 """
     
     # Get user-specified parameters
-    target_ftp = user_params.get('target_ftp', user.current_ftp)
-    plan_duration = user_params.get('duration', 12)  # weeks
+    goal_type = user_params.get('goal_type', 'general_fitness')
+    target_ftp = user_params.get('target_ftp', user.current_ftp + 20 if user.current_ftp else 300)
+    plan_duration = user_params.get('duration_weeks', 12)  # weeks
     rides_per_week = user_params.get('rides_per_week', 4)
     hours_per_week = user_params.get('hours_per_week', 6)
     
@@ -268,10 +269,21 @@ IMPORTANT: Base all recommendations on proven training science. Be specific with
         
         # Add dates to each day
         today = datetime.utcnow().date()
+        print(f"DEBUG: Today's date is {today}, generating plan for next 7 days")
         for i, day in enumerate(plan_data.get('days', [])):
-            day_date = today + timedelta(days=i+1)
-            day['date'] = day_date.isoformat()
+            day_date = today + timedelta(days=i)
+            # Add time component to avoid timezone parsing issues in frontend
+            day['date'] = f"{day_date.isoformat()}T12:00:00Z"
             day['day'] = day_date.strftime('%A')
+        
+        # Add plan metadata
+        plan_data['goal_type'] = goal_type
+        plan_data['duration_weeks'] = plan_duration
+        plan_data['rides_per_week'] = rides_per_week
+        plan_data['weekly_hours'] = hours_per_week
+        plan_data['current_ftp'] = user.current_ftp or 250
+        plan_data['target_ftp'] = target_ftp
+        plan_data['completion_percentage'] = 0  # New plan
         
         return plan_data
         
@@ -354,10 +366,10 @@ def generate_fallback_plan():
     ]
     
     for i, workout in enumerate(workout_schedule):
-        day_date = today + timedelta(days=i+1)
+        day_date = today + timedelta(days=i)
         days.append({
             "day": day_date.strftime('%A'),
-            "date": day_date.isoformat(),
+            "date": f"{day_date.isoformat()}T12:00:00Z",
             "workout_type": workout["type"],
             "duration_minutes": workout["duration"],
             "intensity": workout["intensity"],
@@ -371,6 +383,13 @@ def generate_fallback_plan():
         "week_focus": "Base phase training - building aerobic endurance and threshold power following periodization principles",
         "weekly_tss_target": 350,
         "periodization_phase": "Base",
-        "days": days
+        "days": days,
+        "goal_type": "general_fitness",
+        "duration_weeks": 12,
+        "rides_per_week": 4,
+        "weekly_hours": 6,
+        "current_ftp": 250,
+        "target_ftp": 275,
+        "completion_percentage": 0
     }
 
