@@ -132,7 +132,7 @@ Recent Activity (Last 14 days):
 """
     
     # Get user-specified parameters
-    target_ftp = user_params.get('target_ftp', profile.current_ftp)
+    target_ftp = user_params.get('target_ftp', user.current_ftp)
     plan_duration = user_params.get('duration', 12)  # weeks
     rides_per_week = user_params.get('rides_per_week', 4)
     hours_per_week = user_params.get('hours_per_week', 6)
