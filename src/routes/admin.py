@@ -128,3 +128,93 @@ def fix_onboarding():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+
+
+@admin_bp.route('/populate-metrics', methods=['POST'])
+def populate_metrics():
+    """Populate missing avg_speed, max_speed, and max_power for all rides"""
+    try:
+        # Get all rides
+        rides = Ride.query.all()
+        
+        updated_count = 0
+        
+        # Ride type intensities (as % of FTP)
+        ride_types = {
+            'Recovery': 0.55,
+            'Endurance': 0.65,
+            'Tempo': 0.75,
+            'Threshold': 0.88,
+            'Interval': 0.95,
+            'Morning': 0.70,
+            'Afternoon': 0.70,
+            'Evening': 0.70
+        }
+        
+        for ride in rides:
+            updated = False
+            
+            # Get user's FTP
+            user = User.query.get(ride.user_id)
+            if not user:
+                continue
+            
+            # Calculate avg_speed if missing (distance / time)
+            if ride.avg_speed is None or ride.avg_speed == 0:
+                if ride.distance and ride.duration and ride.duration > 0:
+                    ride.avg_speed = round(ride.distance / (ride.duration / 3600), 1)
+                    updated = True
+            
+            # Calculate max_speed if missing
+            if ride.max_speed is None or ride.max_speed == 0:
+                if ride.avg_speed and ride.avg_speed > 0:
+                    ride.max_speed = round(ride.avg_speed * 1.3, 1)
+                    updated = True
+            
+            # Calculate power metrics if missing
+            if (ride.avg_power is None or ride.avg_power == 0) and user.current_ftp:
+                # Determine ride intensity based on name
+                intensity = 0.70  # default
+                for ride_type, intensity_factor in ride_types.items():
+                    if ride_type in ride.name:
+                        intensity = intensity_factor
+                        break
+                
+                ride.avg_power = int(user.current_ftp * intensity)
+                ride.max_power = int(ride.avg_power * 2.0)
+                ride.normalized_power = int(ride.avg_power * 1.08)
+                ride.ftp = user.current_ftp
+                ride.intensity_factor = round(ride.normalized_power / user.current_ftp, 3)
+                
+                # Calculate TSS
+                duration_hours = ride.duration / 3600
+                ride.training_stress_score = round(
+                    (duration_hours * ride.normalized_power * ride.intensity_factor) / user.current_ftp * 100,
+                    1
+                )
+                updated = True
+            
+            # Calculate max_power if missing but avg_power exists
+            elif ride.max_power is None or ride.max_power == 0:
+                if ride.avg_power and ride.avg_power > 0:
+                    ride.max_power = int(ride.avg_power * 2.0)
+                    updated = True
+            
+            if updated:
+                updated_count += 1
+        
+        # Commit all changes
+        if updated_count > 0:
+            db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully updated {updated_count} rides with missing metrics',
+            'updated_count': updated_count,
+            'total_rides': len(rides)
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
