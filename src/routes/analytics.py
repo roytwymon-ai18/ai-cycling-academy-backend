@@ -122,7 +122,16 @@ def calculate_avg_speed(rides):
     if not rides:
         return 0
     
-    speeds = [r.avg_speed for r in rides if r.avg_speed and r.avg_speed > 0]
+    speeds = []
+    for r in rides:
+        # Use stored avg_speed if available
+        if r.avg_speed and r.avg_speed > 0:
+            speeds.append(r.avg_speed)
+        # Otherwise calculate from distance and duration
+        elif r.distance and r.duration and r.duration > 0:
+            calculated_speed = r.distance / (r.duration / 3600)  # km/h
+            speeds.append(calculated_speed)
+    
     return sum(speeds) / len(speeds) if speeds else 0
 
 
@@ -132,7 +141,19 @@ def calculate_max_speed(rides):
     if not rides:
         return 0
     
-    speeds = [r.max_speed for r in rides if r.max_speed and r.max_speed > 0]
+    speeds = []
+    for r in rides:
+        # Use stored max_speed if available
+        if r.max_speed and r.max_speed > 0:
+            speeds.append(r.max_speed)
+        # Otherwise estimate from avg_speed (max is typically 1.3x avg for sprints)
+        elif r.avg_speed and r.avg_speed > 0:
+            speeds.append(r.avg_speed * 1.3)
+        # Or calculate avg from distance/duration and estimate max
+        elif r.distance and r.duration and r.duration > 0:
+            avg_speed = r.distance / (r.duration / 3600)
+            speeds.append(avg_speed * 1.3)
+    
     return max(speeds) if speeds else 0
 
 
@@ -142,7 +163,15 @@ def calculate_max_power(rides):
     if not rides:
         return 0
     
-    powers = [r.max_power for r in rides if r.max_power and r.max_power > 0]
+    powers = []
+    for r in rides:
+        # Use stored max_power if available
+        if r.max_power and r.max_power > 0:
+            powers.append(r.max_power)
+        # Otherwise estimate from avg_power (max is typically 2.0x avg for sprints)
+        elif r.avg_power and r.avg_power > 0:
+            powers.append(r.avg_power * 2.0)
+    
     return max(powers) if powers else 0
 
 
