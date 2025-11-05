@@ -37,6 +37,9 @@ def get_analytics():
             'avg_power': 0,
             'avg_weighted_power': 0,
             'avg_intensity': 0,
+            'avg_speed': 0,
+            'max_speed': 0,
+            'max_power': 0,
             'total_tss': 0,
             'total_work_kj': 0,
             'total_calories': 0,
@@ -62,6 +65,11 @@ def get_analytics():
     # NEW FEATURE 6: Calculate work done and calories
     total_work_kj = calculate_total_work(rides)
     total_calories = round(total_work_kj)  # kJ to kcal is approximately 1:1
+    
+    # Calculate speed and power metrics
+    avg_speed = calculate_avg_speed(rides)
+    max_speed = calculate_max_speed(rides)
+    max_power = calculate_max_power(rides)
     
     # NEW FEATURE 1: Calculate average intensity
     avg_intensity = calculate_avg_intensity(rides, user.current_ftp)
@@ -90,11 +98,14 @@ def get_analytics():
         'total_rides': total_rides,
         'total_distance': round(total_distance, 1),
         'avg_power': round(avg_power, 0),
-        'avg_weighted_power': round(avg_weighted_power, 0),  # NEW
+        'avg_weighted_power': round(avg_weighted_power, 0),
         'avg_intensity': round(avg_intensity, 1),
+        'avg_speed': round(avg_speed, 1),
+        'max_speed': round(max_speed, 1),
+        'max_power': round(max_power, 0),
         'total_tss': round(total_tss, 0),
-        'total_work_kj': round(total_work_kj, 1),  # NEW
-        'total_calories': total_calories,  # NEW
+        'total_work_kj': round(total_work_kj, 1),
+        'total_calories': total_calories,
         'rides_per_week': round(rides_per_week, 1),
         'hours_per_week': round(hours_per_week, 1),
         'weekly_tss': weekly_tss,
@@ -103,6 +114,36 @@ def get_analytics():
         'progress_comparison': progress_comparison,
         'monthly_stats': monthly_stats
     }), 200
+
+
+# Calculate average speed across all rides
+def calculate_avg_speed(rides):
+    """Calculate average speed across all rides in km/h"""
+    if not rides:
+        return 0
+    
+    speeds = [r.avg_speed for r in rides if r.avg_speed and r.avg_speed > 0]
+    return sum(speeds) / len(speeds) if speeds else 0
+
+
+# Calculate maximum speed across all rides
+def calculate_max_speed(rides):
+    """Calculate maximum speed achieved across all rides in km/h"""
+    if not rides:
+        return 0
+    
+    speeds = [r.max_speed for r in rides if r.max_speed and r.max_speed > 0]
+    return max(speeds) if speeds else 0
+
+
+# Calculate maximum power (peak) across all rides
+def calculate_max_power(rides):
+    """Calculate maximum power (peak) achieved across all rides in watts"""
+    if not rides:
+        return 0
+    
+    powers = [r.max_power for r in rides if r.max_power and r.max_power > 0]
+    return max(powers) if powers else 0
 
 
 # NEW FEATURE 5: Estimate weighted average power
@@ -291,11 +332,20 @@ def calculate_monthly_stats(user, days):
         
         if month_rides:
             metrics = calculate_period_metrics(month_rides, user.current_ftp)
+            
+            # Calculate speed and power metrics for the month
+            month_avg_speed = calculate_avg_speed(month_rides)
+            month_max_speed = calculate_max_speed(month_rides)
+            month_max_power = calculate_max_power(month_rides)
+            
             months_data.insert(0, {
                 'month': month_start.strftime('%b %Y'),
                 'rides': metrics['ride_count'],
                 'distance': round(metrics['distance'], 1),
                 'avg_power': round(metrics['avg_power'], 0),
+                'avg_speed': round(month_avg_speed, 1),
+                'max_speed': round(month_max_speed, 1),
+                'max_power': round(month_max_power, 0),
                 'total_tss': round(metrics['total_tss'], 0)
             })
     
@@ -417,7 +467,7 @@ def generate_enhanced_insights(rides, user, total_tss, rides_per_week, hours_per
 
 
 def calculate_weekly_tss(rides, days):
-    """Calculate TSS per week for chart"""
+    """Calculate TSS and other metrics per week for chart"""
     weeks = min(int(days / 7), 12)  # Max 12 weeks for chart
     weekly_data = []
     
@@ -429,9 +479,17 @@ def calculate_weekly_tss(rides, days):
         week_rides = [r for r in rides if week_start <= r.date < week_end]
         week_tss = sum(r.training_stress_score or 0 for r in week_rides)
         
+        # Calculate speed metrics for the week
+        week_avg_speed = calculate_avg_speed(week_rides)
+        week_max_speed = calculate_max_speed(week_rides)
+        week_max_power = calculate_max_power(week_rides)
+        
         weekly_data.insert(0, {
             'week': weeks - week,
-            'tss': round(week_tss, 1)
+            'tss': round(week_tss, 1),
+            'avg_speed': round(week_avg_speed, 1),
+            'max_speed': round(week_max_speed, 1),
+            'max_power': round(week_max_power, 0)
         })
     
     return weekly_data
