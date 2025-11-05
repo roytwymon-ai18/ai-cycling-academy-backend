@@ -10,6 +10,10 @@ admin_bp = Blueprint('admin', __name__)
 def generate_sample_data():
     """Generate sample ride data for demo account"""
     try:
+        from flask import request
+        data = request.get_json() or {}
+        force = data.get('force', False)
+        
         # Find demo user
         demo_user = User.query.filter_by(username='demo').first()
         if not demo_user:
@@ -17,8 +21,13 @@ def generate_sample_data():
         
         # Check if demo user already has rides
         existing_rides = Ride.query.filter_by(user_id=demo_user.id).count()
-        if existing_rides > 0:
+        if existing_rides > 0 and not force:
             return jsonify({'message': f'Demo user already has {existing_rides} rides'}), 200
+        
+        # Delete existing rides if force=True
+        if force and existing_rides > 0:
+            Ride.query.filter_by(user_id=demo_user.id).delete()
+            db.session.commit()
         
         # Generate 5 sample rides over the past 2 weeks
         sample_rides = []
@@ -35,20 +44,17 @@ def generate_sample_data():
             
             ride = Ride(
                 user_id=demo_user.id,
-                filename=f'sample_ride_{i+1}.fit',
-                upload_date=ride_date,
-                ride_date=ride_date,
+                name=f'Sample Ride {i+1}',
+                date=ride_date,
                 duration=duration,
-                distance=distance,
+                distance=distance / 1000,  # Convert meters to km
                 avg_power=avg_power,
                 max_power=int(avg_power * 1.8),
-                avg_hr=avg_hr,
-                max_hr=int(avg_hr * 1.15),
+                avg_heart_rate=avg_hr,
+                max_heart_rate=int(avg_hr * 1.15),
                 avg_cadence=avg_cadence,
-                max_cadence=int(avg_cadence * 1.3),
                 elevation_gain=elevation_gain,
-                calories=int(duration * avg_power * 0.0036),
-                tss=int(duration * avg_power * 0.01)
+                training_stress_score=int(duration * avg_power * 0.01)
             )
             sample_rides.append(ride)
         
@@ -63,6 +69,61 @@ def generate_sample_data():
             'rides': len(sample_rides)
         }), 200
         
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+
+
+@admin_bp.route('/fix-onboarding', methods=['POST'])
+def fix_onboarding():
+    """Admin endpoint to manually set onboarding completion"""
+    try:
+        from flask import request, jsonify
+        from src.models.client_profile import ClientProfile
+        
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            return jsonify({'error': 'user_id required'}), 400
+        
+        # Get or create profile
+        profile = ClientProfile.query.filter_by(user_id=user_id).first()
+        if not profile:
+            profile = ClientProfile(user_id=user_id)
+            db.session.add(profile)
+        
+        # Set onboarding as completed
+        profile.onboarding_completed = True
+        profile.onboarding_step = 12
+        
+        # Set some default values
+        if not profile.rider_type:
+            profile.rider_type = "Road cycling"
+        if not profile.primary_goals:
+            profile.primary_goals = "Improve FTP and endurance"
+        if not profile.training_availability:
+            profile.training_availability = "4-5 days per week"
+        
+        db.session.add(profile)
+        db.session.flush()
+        db.session.commit()
+        
+        # Verify it was saved
+        saved_profile = ClientProfile.query.filter_by(user_id=user_id).first()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Onboarding fixed for user {user_id}',
+            'profile': {
+                'id': saved_profile.id,
+                'user_id': saved_profile.user_id,
+                'onboarding_completed': saved_profile.onboarding_completed,
+                'onboarding_step': saved_profile.onboarding_step
+            }
+        }), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

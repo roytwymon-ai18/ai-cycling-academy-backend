@@ -24,3 +24,7 @@ primary_region = 'iad'
 [env]
   FLASK_ENV = "production"
   SECRET_KEY = "ai-cycling-secret-key-2024"
+
+[mounts]
+  source = "app_data"
+  destination = "/data"

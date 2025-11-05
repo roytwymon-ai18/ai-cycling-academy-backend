@@ -16,11 +16,16 @@ from src.routes.coaching import coaching_bp
 from src.routes.upload import upload_bp
 from src.routes.analytics import analytics_bp
 from src.routes.admin import admin_bp
-# from src.routes.strava import strava_bp
-# from src.routes.training_plans import training_plans_bp  # Disabled due to SQLAlchemy registry conflict
+from src.routes.strava import strava_bp
+from src.routes.training_plan import training_plan_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
+
+# Session cookie configuration for cross-origin requests
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True  # Required for SameSite=None
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 # Enable CORS for all routes with credentials support
 # Allow localhost and all Vercel deployments using regex pattern
@@ -39,11 +44,13 @@ app.register_blueprint(coaching_bp, url_prefix='/api')
 app.register_blueprint(upload_bp, url_prefix='/api')
 app.register_blueprint(analytics_bp, url_prefix='/api')
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
-# app.register_blueprint(strava_bp, url_prefix='/api/strava')
-# app.register_blueprint(training_plans_bp, url_prefix='/api/training-plans')  # Disabled due to SQLAlchemy registry conflict
+app.register_blueprint(strava_bp, url_prefix='/api/strava')
+app.register_blueprint(training_plan_bp, url_prefix='/api')
 
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
+# Use persistent volume if available, otherwise use local directory
+db_path = '/data/app.db' if os.path.exists('/data') else os.path.join(os.path.dirname(__file__), 'database', 'app.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
@@ -71,6 +78,73 @@ with app.app_context():
 def health():
     from flask import jsonify
     return jsonify({'status': 'ok'}), 200
+
+@app.route('/api/test/profiles')
+def test_profiles():
+    """Diagnostic endpoint to check all client profiles"""
+    from flask import jsonify
+    from src.models.client_profile import ClientProfile
+    
+    try:
+        profiles = ClientProfile.query.all()
+        return jsonify({
+            'success': True,
+            'count': len(profiles),
+            'profiles': [{
+                'id': p.id,
+                'user_id': p.user_id,
+                'onboarding_completed': p.onboarding_completed,
+                'onboarding_step': p.onboarding_step,
+                'created_at': p.created_at.isoformat() if p.created_at else None
+            } for p in profiles]
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/test/db-write')
+def test_db_write():
+    """Test endpoint to verify database writes are persisting"""
+    from flask import jsonify
+    import os
+    from datetime import datetime
+    
+    try:
+        # Check if database file exists
+        db_path = '/data/app.db' if os.path.exists('/data') else os.path.join(os.path.dirname(__file__), 'database', 'app.db')
+        db_exists = os.path.exists(db_path)
+        db_writable = os.access(os.path.dirname(db_path), os.W_OK) if os.path.exists(os.path.dirname(db_path)) else False
+        
+        # Try to create a test user
+        test_username = f"test_{int(datetime.utcnow().timestamp())}"
+        test_user = User(username=test_username, email=f"{test_username}@test.com", password_hash="test")
+        db.session.add(test_user)
+        db.session.commit()
+        
+        # Verify it was saved
+        found_user = User.query.filter_by(username=test_username).first()
+        
+        # Clean up test user
+        if found_user:
+            db.session.delete(found_user)
+            db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'db_path': db_path,
+            'db_exists': db_exists,
+            'db_writable': db_writable,
+            'write_success': True,
+            'read_success': found_user is not None,
+            'test_username': test_username
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'db_path': db_path,
+            'db_exists': db_exists,
+            'db_writable': db_writable
+        }), 500
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

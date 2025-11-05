@@ -181,3 +181,130 @@ def generate_insights(rides, user, total_tss, rides_per_week, hours_per_week):
     
     return insights
 
+
+
+
+@analytics_bp.route('/analytics/last-ride-analysis', methods=['GET'])
+def get_last_ride_analysis():
+    """Get AI-powered analysis of the user's most recent ride"""
+    user = require_auth()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get the most recent ride
+    last_ride = Ride.query.filter_by(user_id=user.id).order_by(Ride.date.desc()).first()
+    
+    if not last_ride:
+        return jsonify({'ride': None, 'analysis': None}), 200
+    
+    # Get user's profile for personalized insights
+    from src.models.client_profile import ClientProfile
+    profile = ClientProfile.query.filter_by(user_id=user.id).first()
+    
+    # Generate AI analysis
+    try:
+        analysis = generate_ride_analysis(last_ride, profile, user)
+    except Exception as e:
+        print(f"Error generating ride analysis: {str(e)}")
+        analysis = "Analysis temporarily unavailable. Your ride data has been recorded successfully."
+    
+    # Format ride data
+    ride_data = {
+        'id': last_ride.id,
+        'name': last_ride.name,
+        'date': last_ride.date.isoformat() if last_ride.date else None,
+        'distance': last_ride.distance,  # in km
+        'duration': last_ride.duration,  # in seconds
+        'avg_power': last_ride.avg_power,
+        'avg_heart_rate': last_ride.avg_heart_rate,
+        'avg_cadence': last_ride.avg_cadence,
+        'training_stress_score': last_ride.training_stress_score,
+        'elevation_gain': last_ride.elevation_gain
+    }
+    
+    return jsonify({
+        'ride': ride_data,
+        'analysis': analysis
+    }), 200
+
+
+def generate_ride_analysis(ride, profile, user):
+    """Generate AI-powered analysis of a ride based on user's goals"""
+    import os
+    from openai import OpenAI
+    
+    # Initialize OpenAI client (API key from environment)
+    client = OpenAI()
+    
+    # Build context about the user
+    user_context = ""
+    if profile:
+        if profile.primary_goals:
+            user_context += f"User's goals: {profile.primary_goals}\n"
+        if profile.rider_type:
+            user_context += f"Rider type: {profile.rider_type}\n"
+        if profile.training_availability:
+            user_context += f"Training availability: {profile.training_availability}\n"
+        if profile.current_ftp:
+            user_context += f"Current FTP: {profile.current_ftp}W\n"
+    
+    # Build ride metrics
+    ride_metrics = f"""
+Ride: {ride.name}
+Date: {ride.date.strftime('%Y-%m-%d') if ride.date else 'Unknown'}
+Distance: {ride.distance:.1f} km ({ride.distance * 0.621371:.1f} miles)
+Duration: {ride.duration // 60} minutes
+"""
+    
+    if ride.avg_power:
+        ride_metrics += f"Average Power: {ride.avg_power}W\n"
+        if profile and profile.current_ftp:
+            intensity = (ride.avg_power / profile.current_ftp) * 100
+            ride_metrics += f"Intensity: {intensity:.0f}% of FTP\n"
+    
+    if ride.avg_heart_rate:
+        ride_metrics += f"Average Heart Rate: {ride.avg_heart_rate} bpm\n"
+    
+    if ride.avg_cadence:
+        ride_metrics += f"Average Cadence: {ride.avg_cadence} rpm\n"
+    
+    if ride.training_stress_score:
+        ride_metrics += f"Training Stress Score (TSS): {ride.training_stress_score}\n"
+    
+    if ride.elevation_gain:
+        ride_metrics += f"Elevation Gain: {ride.elevation_gain}m ({ride.elevation_gain * 3.28084:.0f} feet)\n"
+    
+    # Create prompt for AI analysis
+    prompt = f"""As an expert cycling coach, analyze this ride and provide comprehensive insights to help the athlete achieve their goals.
+
+{user_context}
+
+{ride_metrics}
+
+Provide a thorough analysis covering:
+1. Overall performance assessment
+2. Intensity and effort level
+3. How this ride aligns with their stated goals
+4. Specific strengths demonstrated
+5. Areas for improvement
+6. Actionable recommendations for their next training session
+
+Be specific, encouraging, and data-driven. Keep the tone professional but friendly. Limit response to 250 words."""
+    
+    # Call OpenAI API
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": "You are Coach Manee, a legendary cycling coach with over 30 years of experience coaching at the highest levels of competitive cycling. You've guided numerous athletes to World Championship and Olympic medals, developed countless national champions, and pioneered training methodologies that have revolutionized the sport. Your expertise spans all cycling disciplines. You combine cutting-edge sports science with decades of real-world coaching wisdom to provide insightful, personalized training analysis."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
+        
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"OpenAI API error: {str(e)}")
+        raise
+

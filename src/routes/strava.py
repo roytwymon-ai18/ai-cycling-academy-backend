@@ -94,6 +94,7 @@ def strava_callback():
             db.session.add(strava_token)
         
         db.session.commit()
+        print(f"✓ Strava token saved for user {user_id}, athlete {strava_token.athlete_id}")
         
         # Redirect back to frontend with success
         return redirect(f"{FRONTEND_URL}?strava_connected=true")
@@ -228,6 +229,7 @@ def sync_activities():
         # Update last sync time
         strava_token.last_sync = datetime.utcnow()
         db.session.commit()
+        print(f"✓ Strava sync completed: {imported_count} rides imported for user {user_id}")
         
         return jsonify({
             'success': True,

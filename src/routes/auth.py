@@ -51,19 +51,25 @@ def register():
         return jsonify({'error': 'Email already exists'}), 400
     
     # Create new user
-    user = User(
-        username=username,
-        email=email,
-        password_hash=generate_password_hash(password)
-    )
-    
-    db.session.add(user)
-    db.session.commit()
-    
-    return jsonify({
-        'message': 'Registration successful',
-        'user': user.to_dict()
-    }), 201
+    try:
+        user = User(
+            username=username,
+            email=email,
+            password_hash=generate_password_hash(password),
+            created_at=datetime.utcnow()
+        )
+        
+        db.session.add(user)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Registration successful',
+            'user': user.to_dict()
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Registration error: {e}")
+        return jsonify({'error': 'Failed to create account. Please try again.'}), 500
 
 @auth_bp.route('/me', methods=['GET'])
 def get_current_user():

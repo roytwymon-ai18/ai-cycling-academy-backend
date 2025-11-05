@@ -116,7 +116,7 @@ ACTIONS:
 """
     
     try:
-        response = chat_with_ai_coach(user, prompt, "You are Coach Manee analyzing a new client's profile.")
+        response = chat_with_ai_coach(user, prompt, "You are Coach Manee, a legendary cycling coach with over 30 years of experience at the highest levels of competitive cycling, analyzing a new client's profile to provide personalized coaching.")
         
         # Parse response
         if "ASSESSMENT:" in response and "ACTIONS:" in response:
@@ -152,10 +152,17 @@ def chat_with_coach():
         
         # Save user's response to previous question
         if current_step > 0 and current_step <= len(ONBOARDING_QUESTIONS):
-            prev_question = ONBOARDING_QUESTIONS[current_step - 1]
-            field_name = prev_question['field']
-            setattr(profile, field_name, message)
-            db.session.commit()
+            try:
+                prev_question = ONBOARDING_QUESTIONS[current_step - 1]
+                field_name = prev_question['field']
+                setattr(profile, field_name, message)
+                db.session.add(profile)
+                db.session.flush()
+                db.session.commit()
+                print(f"✓ Saved {field_name} for user {user.id}")
+            except Exception as e:
+                print(f"✗ Error saving profile field {field_name}: {str(e)}")
+                db.session.rollback()
         
         # Save user message to history
         user_msg = ChatMessage(
@@ -177,12 +184,30 @@ def chat_with_coach():
             if current_step > 0 and 'follow_up' in ONBOARDING_QUESTIONS[current_step - 1]:
                 response = ONBOARDING_QUESTIONS[current_step - 1]['follow_up'] + "\n\n" + response
             
-            profile.onboarding_step = next_step
-            db.session.commit()
+            try:
+                profile.onboarding_step = next_step
+                db.session.add(profile)  # Explicitly add to session
+                db.session.flush()
+                db.session.commit()
+                print(f"✓ Updated onboarding step to {next_step} for user {user.id}")
+            except Exception as e:
+                print(f"✗ Error updating onboarding step: {str(e)}")
+                db.session.rollback()
+                raise
         else:
             # Onboarding complete!
-            profile.onboarding_completed = True
-            db.session.commit()
+            try:
+                profile.onboarding_completed = True
+                profile.onboarding_step = len(ONBOARDING_QUESTIONS)
+                db.session.add(profile)  # Explicitly add to session
+                db.session.flush()  # Flush before commit
+                db.session.commit()
+                print(f"✓ Onboarding completed for user {user.id}, profile ID {profile.id}")
+                print(f"  Profile status: completed={profile.onboarding_completed}, step={profile.onboarding_step}")
+            except Exception as e:
+                print(f"✗ Error saving onboarding completion: {str(e)}")
+                db.session.rollback()
+                raise
             
             # Generate AI assessment and action items
             generate_profile_summary(profile, user)
@@ -234,7 +259,7 @@ What would you like to focus on first?"""
     ).order_by(Ride.date.desc()).limit(3).all()
     
     # Build context with user profile and history
-    context = f"You are Coach Manee, a personalized AI cycling coach.\n"
+    context = f"You are Coach Manee, a legendary cycling coach with 30+ years of experience coaching World Champions, Olympians, and national champions. You provide personalized, expert coaching.\n"
     context += f"Athlete: {user.username}\n"
     context += f"FTP: {user.current_ftp}W\n"
     
