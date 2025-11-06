@@ -48,9 +48,17 @@ app.register_blueprint(strava_bp, url_prefix='/api/strava')
 app.register_blueprint(training_plan_bp, url_prefix='/api')
 
 # Database configuration
-# Use persistent volume if available, otherwise use local directory
-db_path = '/data/app.db' if os.path.exists('/data') else os.path.join(os.path.dirname(__file__), 'database', 'app.db')
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
+# Use DATABASE_URL from environment (PostgreSQL on Render), fallback to SQLite for local dev
+database_url = os.getenv('DATABASE_URL')
+if database_url:
+    # Render PostgreSQL URLs start with postgres://, but SQLAlchemy requires postgresql://
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    # Fallback to SQLite for local development
+    db_path = '/data/app.db' if os.path.exists('/data') else os.path.join(os.path.dirname(__file__), 'database', 'app.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
