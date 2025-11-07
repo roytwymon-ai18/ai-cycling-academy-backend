@@ -4,6 +4,11 @@ from src.models.ride import Ride
 from src.models.chat_message import ChatMessage
 from src.models.client_profile import ClientProfile
 from src.utils.ai_analysis import chat_with_ai_coach, generate_training_plan
+from src.utils.weather_service import (
+    get_weather_forecast,
+    get_weather_summary_text,
+    get_weather_coaching_insights
+)
 from datetime import datetime, timedelta
 import json
 
@@ -280,6 +285,17 @@ What would you like to focus on first?"""
             context += f"{msg.role}: {msg.content[:100]}...\n"
         context += "\n"
     
+    # Add weather forecast if user has location set
+    if user.location_lat and user.location_lon:
+        try:
+            forecasts = get_weather_forecast(user.location_lat, user.location_lon, days=7)
+            if forecasts:
+                weather_summary = get_weather_summary_text(forecasts)
+                context += "\n" + weather_summary + "\n"
+                context += "Use this weather information to provide proactive coaching advice about workout scheduling, indoor/outdoor recommendations, and intensity adjustments.\n"
+        except Exception as e:
+            print(f"Weather fetch error: {e}")
+    
     context += "Remember past conversations and provide personalized, contextual coaching advice based on their profile.\n"
     
     try:
@@ -405,3 +421,65 @@ def manage_goals():
     # GET - return current goals
     return jsonify({'goals': user.training_goals}), 200
 
+
+
+@coaching_bp.route('/coaching/weather', methods=['GET', 'POST'])
+def manage_weather():
+    """Get weather forecast or update user location"""
+    user = require_auth()
+    if not user:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if request.method == 'POST':
+        # Update user location
+        data = request.get_json()
+        city = data.get('city')
+        lat = data.get('lat')
+        lon = data.get('lon')
+        
+        if city and not (lat and lon):
+            # Get coordinates from city name
+            from src.utils.weather_service import get_location_from_city
+            coords = get_location_from_city(city)
+            if coords:
+                lat, lon = coords
+            else:
+                return jsonify({'error': 'Could not find location'}), 400
+        
+        if lat and lon:
+            user.location_city = city
+            user.location_lat = lat
+            user.location_lon = lon
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'location': {
+                    'city': city,
+                    'lat': lat,
+                    'lon': lon
+                }
+            }), 200
+        else:
+            return jsonify({'error': 'Location data required'}), 400
+    
+    # GET - return weather forecast
+    if not user.location_lat or not user.location_lon:
+        return jsonify({'error': 'Location not set. Please set your location first.'}), 400
+    
+    try:
+        forecasts = get_weather_forecast(user.location_lat, user.location_lon, days=7)
+        if not forecasts:
+            return jsonify({'error': 'Weather data unavailable'}), 503
+        
+        return jsonify({
+            'location': {
+                'city': user.location_city,
+                'lat': float(user.location_lat),
+                'lon': float(user.location_lon)
+            },
+            'forecasts': forecasts,
+            'summary': get_weather_summary_text(forecasts)
+        }), 200
+    except Exception as e:
+        return jsonify({'error': f'Weather fetch failed: {str(e)}'}), 500
