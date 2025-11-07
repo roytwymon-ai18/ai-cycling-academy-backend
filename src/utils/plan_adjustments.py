@@ -30,12 +30,18 @@ def adjust_workout_intensity(workout_id, new_tss, reason):
         # Record the adjustment
         adjustment = PlanAdjustment(
             plan_id=workout.plan_id,
+            user_id=workout.user_id,
             adjustment_type='intensity_change',
-            target_date=workout.scheduled_date,
-            old_value=str(old_tss),
-            new_value=str(new_tss),
-            reason=reason,
-            created_at=datetime.utcnow()
+            trigger_reason=reason,
+            trigger_data={'workout_id': workout_id, 'rpe_feedback': True},
+            changes_made={
+                'workout_name': workout.name,
+                'old_tss': old_tss,
+                'new_tss': new_tss,
+                'change_percent': round(((new_tss / old_tss) - 1) * 100, 1)
+            },
+            affected_workouts=[workout_id],
+            estimated_impact=f"Reduced training load by {old_tss - new_tss} TSS to allow recovery"
         )
         
         db.session.add(adjustment)
@@ -76,12 +82,18 @@ def reschedule_workout(workout_id, new_date, reason):
         # Record the adjustment
         adjustment = PlanAdjustment(
             plan_id=workout.plan_id,
+            user_id=workout.user_id,
             adjustment_type='reschedule',
-            target_date=old_date,
-            old_value=old_date.strftime('%Y-%m-%d'),
-            new_value=new_date.strftime('%Y-%m-%d'),
-            reason=reason,
-            created_at=datetime.utcnow()
+            trigger_reason=reason,
+            trigger_data={'workout_id': workout_id, 'schedule_conflict': True},
+            changes_made={
+                'workout_name': workout.name,
+                'old_date': old_date.strftime('%Y-%m-%d'),
+                'new_date': new_date.strftime('%Y-%m-%d'),
+                'days_moved': (new_date - old_date).days
+            },
+            affected_workouts=[workout_id],
+            estimated_impact=f"Workout moved {(new_date - old_date).days} days to accommodate schedule"
         )
         
         db.session.add(adjustment)
@@ -124,12 +136,18 @@ def swap_workout_type(workout_id, new_workout_name, new_description, reason):
         # Record the adjustment
         adjustment = PlanAdjustment(
             plan_id=workout.plan_id,
+            user_id=workout.user_id,
             adjustment_type='workout_swap',
-            target_date=workout.scheduled_date,
-            old_value=old_name,
-            new_value=new_workout_name,
-            reason=reason,
-            created_at=datetime.utcnow()
+            trigger_reason=reason,
+            trigger_data={'workout_id': workout_id, 'fatigue_driven': True},
+            changes_made={
+                'old_workout': old_name,
+                'new_workout': new_workout_name,
+                'new_description': new_description,
+                'date': workout.scheduled_date.strftime('%Y-%m-%d')
+            },
+            affected_workouts=[workout_id],
+            estimated_impact=f"Changed workout type to better match athlete readiness"
         )
         
         db.session.add(adjustment)
@@ -173,15 +191,23 @@ def add_rest_day(plan_id, date, reason):
         else:
             old_workout = 'No workout scheduled'
         
+        # Get user_id from plan
+        plan = TrainingPlan.query.get(plan_id)
+        
         # Record the adjustment
         adjustment = PlanAdjustment(
             plan_id=plan_id,
+            user_id=plan.user_id,
             adjustment_type='rest_day_added',
-            target_date=date,
-            old_value=old_workout,
-            new_value='Rest Day',
-            reason=reason,
-            created_at=datetime.utcnow()
+            trigger_reason=reason,
+            trigger_data={'date': date.strftime('%Y-%m-%d'), 'overtraining_prevention': True},
+            changes_made={
+                'replaced_workout': old_workout,
+                'new_status': 'Rest Day',
+                'date': date.strftime('%Y-%m-%d')
+            },
+            affected_workouts=[existing_workout.id] if existing_workout else [],
+            estimated_impact="Added recovery day to prevent overtraining"
         )
         
         db.session.add(adjustment)
@@ -228,15 +254,27 @@ def adjust_weekly_volume(plan_id, week_number, tss_change_percent, reason):
                 workout.target_tss = int(workout.target_tss * multiplier)
                 adjusted_count += 1
         
+        # Get user_id from plan
+        plan = TrainingPlan.query.get(plan_id)
+        
         # Record the adjustment
         adjustment = PlanAdjustment(
             plan_id=plan_id,
+            user_id=plan.user_id,
             adjustment_type='weekly_volume_change',
-            target_date=None,
-            old_value=f'Week {week_number}',
-            new_value=f'{tss_change_percent:+d}%',
-            reason=reason,
-            created_at=datetime.utcnow()
+            trigger_reason=reason,
+            trigger_data={
+                'week_number': week_number,
+                'change_percent': tss_change_percent,
+                'workouts_affected': adjusted_count
+            },
+            changes_made={
+                'week': week_number,
+                'volume_change': f'{tss_change_percent:+d}%',
+                'workouts_adjusted': adjusted_count
+            },
+            affected_workouts=[w.id for w in workouts],
+            estimated_impact=f"Weekly training load adjusted by {tss_change_percent:+d}% for recovery/progression"
         )
         
         db.session.add(adjustment)
@@ -268,14 +306,15 @@ def get_plan_adjustments(plan_id, limit=10):
     try:
         adjustments = PlanAdjustment.query.filter_by(
             plan_id=plan_id
-        ).order_by(PlanAdjustment.created_at.desc()).limit(limit).all()
+        ).order_by(PlanAdjustment.adjustment_date.desc()).limit(limit).all()
         
         return [{
             'type': adj.adjustment_type,
-            'date': adj.target_date.strftime('%Y-%m-%d') if adj.target_date else 'N/A',
-            'change': f'{adj.old_value} → {adj.new_value}',
-            'reason': adj.reason,
-            'when': adj.created_at.strftime('%Y-%m-%d %H:%M')
+            'changes': adj.changes_made,
+            'reason': adj.trigger_reason,
+            'impact': adj.estimated_impact,
+            'when': adj.adjustment_date.strftime('%Y-%m-%d %H:%M'),
+            'affected_workouts': adj.affected_workouts
         } for adj in adjustments]
     except Exception as e:
         print(f"Error getting adjustments: {e}")

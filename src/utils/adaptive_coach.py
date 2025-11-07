@@ -289,6 +289,8 @@ def get_adjustment_summary(plan_id):
     
     summary = "Recent Plan Adjustments:\n"
     for adj in adjustments:
-        summary += f"- {adj['when']}: {adj['type']} - {adj['change']} ({adj['reason']})\n"
+        changes_str = str(adj['changes']) if adj['changes'] else 'N/A'
+        summary += f"- {adj['when']}: {adj['type']} - {changes_str}\n"
+        summary += f"  Reason: {adj['reason']}\n"
     
     return summary
