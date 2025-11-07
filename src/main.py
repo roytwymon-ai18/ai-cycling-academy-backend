@@ -31,7 +31,7 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 # Allow localhost and all Vercel deployments using regex pattern
 CORS(app, 
      supports_credentials=True, 
-     origins=r'https://ai-cycling-dashboard.*\.vercel\.app|http://localhost:517[34]',
+     origins=r'https://aicyclingacademy\.app|https://www\.aicyclingacademy\.app|https://ai-cycling-dashboard.*\.vercel\.app|http://localhost:517[34]',
      allow_headers=['Content-Type'],
      expose_headers=['*'])
 
