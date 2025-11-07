@@ -3,7 +3,8 @@ from src.models.user import User, db
 from src.models.ride import Ride
 from src.models.chat_message import ChatMessage
 from src.models.client_profile import ClientProfile
-from src.utils.ai_analysis import chat_with_ai_coach, generate_training_plan
+from src.utils.ai_analysis import generate_training_plan
+from src.utils.adaptive_coach import chat_with_adaptive_coach, get_adjustment_summary
 from src.utils.weather_service import (
     get_weather_forecast,
     get_weather_summary_text,
@@ -263,6 +264,19 @@ What would you like to focus on first?"""
         Ride.date >= datetime.utcnow() - timedelta(days=7)
     ).order_by(Ride.date.desc()).limit(3).all()
     
+    # Get current training plan if exists
+    try:
+        from src.models.training_plan import TrainingPlan, PlannedWorkout
+        active_plan = TrainingPlan.query.filter(
+            TrainingPlan.user_id == user.id,
+            TrainingPlan.status == 'active',
+            TrainingPlan.start_date <= datetime.utcnow(),
+            TrainingPlan.end_date >= datetime.utcnow()
+        ).first()
+    except Exception as e:
+        print(f"Error loading training plan: {e}")
+        active_plan = None
+    
     # Build context with user profile and history
     context = f"You are Coach Manee, a legendary cycling coach with 30+ years of experience coaching World Champions, Olympians, and national champions. You provide personalized, expert coaching.\n"
     context += f"Athlete: {user.username}\n"
@@ -271,6 +285,32 @@ What would you like to focus on first?"""
     # Add client profile for personalization
     if profile.onboarding_completed:
         context += "\n" + profile.get_profile_summary() + "\n"
+    
+    # Add active training plan to context
+    if active_plan:
+        context += f"\nCurrent Training Plan:\n"
+        context += f"- Goal: {active_plan.goal}\n"
+        context += f"- Duration: {active_plan.start_date.strftime('%Y-%m-%d')} to {active_plan.end_date.strftime('%Y-%m-%d')}\n"
+        context += f"- Current Week: {active_plan.current_week}/{active_plan.total_weeks}\n"
+        context += f"- Current Phase: {active_plan.current_phase}\n"
+        
+        # Get upcoming workouts (next 7 days)
+        try:
+            upcoming_workouts = PlannedWorkout.query.filter(
+                PlannedWorkout.plan_id == active_plan.id,
+                PlannedWorkout.scheduled_date >= datetime.utcnow().date(),
+                PlannedWorkout.scheduled_date <= (datetime.utcnow() + timedelta(days=7)).date(),
+                PlannedWorkout.status != 'completed'
+            ).order_by(PlannedWorkout.scheduled_date).limit(5).all()
+            
+            if upcoming_workouts:
+                context += "\nUpcoming Workouts (next 7 days):\n"
+                for workout in upcoming_workouts:
+                    context += f"- {workout.scheduled_date.strftime('%a %m/%d')}: {workout.name} ({workout.target_tss} TSS)\n"
+        except Exception as e:
+            print(f"Error loading upcoming workouts: {e}")
+        
+        context += "\n"
     
     if recent_rides:
         context += "\nRecent rides (last 7 days):\n"
@@ -284,6 +324,11 @@ What would you like to focus on first?"""
         for msg in chat_history[-10:]:  # Last 10 messages for context
             context += f"{msg.role}: {msg.content[:100]}...\n"
         context += "\n"
+    
+    # Add recent adjustments to context if plan exists
+    if active_plan:
+        adjustment_summary = get_adjustment_summary(active_plan.id)
+        context += f"\n{adjustment_summary}\n"
     
     # Add weather forecast if user has location set
     if user.location_lat and user.location_lon:
@@ -299,7 +344,8 @@ What would you like to focus on first?"""
     context += "Remember past conversations and provide personalized, contextual coaching advice based on their profile.\n"
     
     try:
-        response = chat_with_ai_coach(user, message, context)
+        # Use adaptive coach with plan modification capabilities
+        response, adjustments_made = chat_with_adaptive_coach(user, message, context, active_plan)
         
         # Save assistant response to history
         assistant_msg = ChatMessage(
@@ -312,7 +358,8 @@ What would you like to focus on first?"""
         
         return jsonify({
             'response': response,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.utcnow().isoformat(),
+            'adjustments_made': adjustments_made if adjustments_made else None
         }), 200
     except Exception as e:
         db.session.rollback()

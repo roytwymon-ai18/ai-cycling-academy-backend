@@ -185,7 +185,9 @@ def sync_activities():
         )
         
         if activities_response.status_code != 200:
-            return jsonify({'error': 'Failed to fetch activities'}), 400
+            error_msg = f'Strava API error {activities_response.status_code}: {activities_response.text}'
+            print(error_msg)
+            return jsonify({'error': 'Failed to fetch activities', 'details': activities_response.text}), 400
         
         activities = activities_response.json()
         imported_count = 0
