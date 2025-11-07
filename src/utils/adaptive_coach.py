@@ -12,7 +12,10 @@ from src.utils.plan_adjustments import (
     swap_workout_type,
     add_rest_day,
     adjust_weekly_volume,
-    get_plan_adjustments
+    get_plan_adjustments,
+    override_with_unplanned_activity,
+    add_priority_event,
+    rebalance_week_around_override
 )
 
 # Initialize OpenAI client
@@ -137,6 +140,96 @@ COACH_FUNCTIONS = [
             },
             "required": ["plan_id", "week_number", "tss_change_percent", "reason"]
         }
+    },
+    {
+        "name": "override_with_unplanned_activity",
+        "description": "Replace a scheduled workout with a user's unplanned activity (group ride, event, social ride, etc.)",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "workout_id": {
+                    "type": "integer",
+                    "description": "The ID of the scheduled workout to override"
+                },
+                "activity_description": {
+                    "type": "string",
+                    "description": "Description of the unplanned activity (e.g., 'Saturday group ride', 'Gran Fondo')"
+                },
+                "estimated_tss": {
+                    "type": "integer",
+                    "description": "Estimated TSS of the activity based on duration and intensity"
+                },
+                "estimated_duration": {
+                    "type": "integer",
+                    "description": "Estimated duration in minutes"
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Why the athlete wants to do this activity (social, fun, event, etc.)"
+                }
+            },
+            "required": ["workout_id", "activity_description", "estimated_tss", "estimated_duration", "reason"]
+        }
+    },
+    {
+        "name": "add_priority_event",
+        "description": "Add a priority event (race, gran fondo, century ride) to the training plan",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "plan_id": {
+                    "type": "integer",
+                    "description": "The ID of the training plan"
+                },
+                "event_date": {
+                    "type": "string",
+                    "description": "Date of the event in YYYY-MM-DD format"
+                },
+                "event_name": {
+                    "type": "string",
+                    "description": "Name of the event"
+                },
+                "event_type": {
+                    "type": "string",
+                    "description": "Type of event (race, gran_fondo, century, group_ride, etc.)"
+                },
+                "estimated_tss": {
+                    "type": "integer",
+                    "description": "Expected TSS of the event"
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Additional details about the event"
+                }
+            },
+            "required": ["plan_id", "event_date", "event_name", "event_type", "estimated_tss", "notes"]
+        }
+    },
+    {
+        "name": "rebalance_week_around_override",
+        "description": "Rebalance the training load for a week after a workout override to maintain appropriate weekly TSS",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "plan_id": {
+                    "type": "integer",
+                    "description": "The ID of the training plan"
+                },
+                "week_number": {
+                    "type": "integer",
+                    "description": "Week to rebalance"
+                },
+                "override_tss_delta": {
+                    "type": "integer",
+                    "description": "TSS difference from the override (positive if more TSS, negative if less)"
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Explanation for the rebalancing"
+                }
+            },
+            "required": ["plan_id", "week_number", "override_tss_delta", "reason"]
+        }
     }
 ]
 
@@ -154,7 +247,17 @@ FUNCTION_MAP = {
         datetime.strptime(date, '%Y-%m-%d').date(),
         reason
     ),
-    "adjust_weekly_volume": adjust_weekly_volume
+    "adjust_weekly_volume": adjust_weekly_volume,
+    "override_with_unplanned_activity": override_with_unplanned_activity,
+    "add_priority_event": lambda plan_id, event_date, event_name, event_type, estimated_tss, notes: add_priority_event(
+        plan_id,
+        datetime.strptime(event_date, '%Y-%m-%d').date(),
+        event_name,
+        event_type,
+        estimated_tss,
+        notes
+    ),
+    "rebalance_week_around_override": rebalance_week_around_override
 }
 
 
@@ -182,6 +285,8 @@ You have the ability to modify the athlete's training plan based on their feedba
 - Feeling great, strong, or ready for more → Consider increasing intensity
 - Schedule conflicts or life events → Reschedule workouts
 - Specific workout concerns → Swap workout types
+- Wanting to do a group ride, event, or unplanned activity → Override scheduled workout and rebalance the week
+- Upcoming race or priority event → Add it to the plan and adjust training around it
 
 IMPORTANT COACHING PRINCIPLES:
 1. Listen carefully to the athlete's feedback about how they're feeling
