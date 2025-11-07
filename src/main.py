@@ -20,7 +20,7 @@ from src.routes.strava import strava_bp
 from src.routes.training_plan import training_plan_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
-app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'asdf#FGSgvasgf$5$WGT')
 
 # Session cookie configuration for cross-origin requests
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'
