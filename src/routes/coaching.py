@@ -3,7 +3,8 @@ from src.models.user import User, db
 from src.models.ride import Ride
 from src.models.chat_message import ChatMessage
 from src.models.client_profile import ClientProfile
-from src.utils.ai_analysis import chat_with_ai_coach, generate_training_plan
+from src.utils.ai_analysis import generate_training_plan
+from src.utils.adaptive_coach import chat_with_adaptive_coach, get_adjustment_summary
 from datetime import datetime, timedelta
 import json
 
@@ -319,10 +320,16 @@ What would you like to focus on first?"""
             context += f"{msg.role}: {msg.content[:100]}...\n"
         context += "\n"
     
+    # Add recent adjustments to context if plan exists
+    if active_plan:
+        adjustment_summary = get_adjustment_summary(active_plan.id)
+        context += f"\n{adjustment_summary}\n"
+    
     context += "Remember past conversations and provide personalized, contextual coaching advice based on their profile.\n"
     
     try:
-        response = chat_with_ai_coach(user, message, context)
+        # Use adaptive coach with plan modification capabilities
+        response, adjustments_made = chat_with_adaptive_coach(user, message, context, active_plan)
         
         # Save assistant response to history
         assistant_msg = ChatMessage(
@@ -335,7 +342,8 @@ What would you like to focus on first?"""
         
         return jsonify({
             'response': response,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.utcnow().isoformat(),
+            'adjustments_made': adjustments_made if adjustments_made else None
         }), 200
     except Exception as e:
         db.session.rollback()
