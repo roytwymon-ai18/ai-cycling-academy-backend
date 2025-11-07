@@ -258,6 +258,19 @@ What would you like to focus on first?"""
         Ride.date >= datetime.utcnow() - timedelta(days=7)
     ).order_by(Ride.date.desc()).limit(3).all()
     
+    # Get current training plan if exists
+    try:
+        from src.models.training_plan import TrainingPlan, PlannedWorkout
+        active_plan = TrainingPlan.query.filter(
+            TrainingPlan.user_id == user.id,
+            TrainingPlan.status == 'active',
+            TrainingPlan.start_date <= datetime.utcnow(),
+            TrainingPlan.end_date >= datetime.utcnow()
+        ).first()
+    except Exception as e:
+        print(f"Error loading training plan: {e}")
+        active_plan = None
+    
     # Build context with user profile and history
     context = f"You are Coach Manee, a legendary cycling coach with 30+ years of experience coaching World Champions, Olympians, and national champions. You provide personalized, expert coaching.\n"
     context += f"Athlete: {user.username}\n"
@@ -266,6 +279,32 @@ What would you like to focus on first?"""
     # Add client profile for personalization
     if profile.onboarding_completed:
         context += "\n" + profile.get_profile_summary() + "\n"
+    
+    # Add active training plan to context
+    if active_plan:
+        context += f"\nCurrent Training Plan:\n"
+        context += f"- Goal: {active_plan.goal}\n"
+        context += f"- Duration: {active_plan.start_date.strftime('%Y-%m-%d')} to {active_plan.end_date.strftime('%Y-%m-%d')}\n"
+        context += f"- Current Week: {active_plan.current_week}/{active_plan.total_weeks}\n"
+        context += f"- Current Phase: {active_plan.current_phase}\n"
+        
+        # Get upcoming workouts (next 7 days)
+        try:
+            upcoming_workouts = PlannedWorkout.query.filter(
+                PlannedWorkout.plan_id == active_plan.id,
+                PlannedWorkout.scheduled_date >= datetime.utcnow().date(),
+                PlannedWorkout.scheduled_date <= (datetime.utcnow() + timedelta(days=7)).date(),
+                PlannedWorkout.status != 'completed'
+            ).order_by(PlannedWorkout.scheduled_date).limit(5).all()
+            
+            if upcoming_workouts:
+                context += "\nUpcoming Workouts (next 7 days):\n"
+                for workout in upcoming_workouts:
+                    context += f"- {workout.scheduled_date.strftime('%a %m/%d')}: {workout.name} ({workout.target_tss} TSS)\n"
+        except Exception as e:
+            print(f"Error loading upcoming workouts: {e}")
+        
+        context += "\n"
     
     if recent_rides:
         context += "\nRecent rides (last 7 days):\n"
