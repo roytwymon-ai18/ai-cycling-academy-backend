@@ -178,10 +178,16 @@ def sync_activities():
                 return jsonify({'error': 'Failed to refresh token'}), 400
         
         # Fetch activities from Strava
+        # Use last_sync to only fetch new activities
+        params = {'per_page': 200}
+        if strava_token.last_sync:
+            # Only fetch activities after last sync (Unix timestamp)
+            params['after'] = int(strava_token.last_sync.timestamp())
+        
         activities_response = requests.get(
             'https://www.strava.com/api/v3/athlete/activities',
             headers={'Authorization': f'Bearer {strava_token.access_token}'},
-            params={'per_page': 200}
+            params=params
         )
         
         if activities_response.status_code != 200:
